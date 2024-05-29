@@ -39,7 +39,7 @@ typedef struct editorState {
 void render_headder(editorState State) {
     printf("\033[1;1H"); 
     printf("\033[47m \033[30;47m");
-    printf("  Spring Syntax");
+    printf("  BITE");
     for(int j=0; j<State.screen_cols-16; j++) printf(" ");
     printf("\033[1;1H\033[1B\033[1B\033[0m");
     fflush(stdout);
