@@ -108,11 +108,6 @@ void newline(editorState* State, row_state** r_state){
   State->no_of_lines++;
   State->no_of_rows++ ;
   State->fileposition_x= 0;
-  // for(int i=0; i<State->no_of_lines-1; i++) {
-  //   if((*r_state+i)->line_no >= new_row->line_no) {
-  //     (*r_state+i)->line_no++;
-  //   }
-  // }
   State->fileposition_y++;
 }
 
@@ -150,13 +145,12 @@ void handle_CSI(editorState* State, escseq key, row_state * r_state) {
         State->fileposition_x = min(r_state[State->index_table[State->fileposition_y]].no_of_char, State->fileposition_x);
       break;
     case DOWN:
-        State->fileposition_y = min(State->fileposition_y + 1, State->no_of_lines - 1);
+        State->fileposition_y = min(State->fileposition_y + 1, State->no_of_rows - 1);
         State->fileposition_x = min(r_state[State->index_table[State->fileposition_y]].no_of_char, State->fileposition_x);
       break;
     case RIGHT:
       if(State->fileposition_x == r_state[State->index_table[State->fileposition_y]].no_of_char ){
-         // next line exists     
-        if(State->fileposition_y + 1 < State->no_of_lines){  
+        if(State->fileposition_y + 1 < State->no_of_rows){  
          State->fileposition_y++;
          State->fileposition_x = 0;
         }         
@@ -167,7 +161,6 @@ void handle_CSI(editorState* State, escseq key, row_state * r_state) {
       
     case LEFT:
       if(State->fileposition_x == 0) {              
-         // prev line exists
          if(State->fileposition_y - 1 >= 0 ){  
            State->fileposition_y--;
            State->fileposition_x = r_state[State->index_table[State->fileposition_y]].no_of_char;
@@ -181,17 +174,16 @@ void handle_CSI(editorState* State, escseq key, row_state * r_state) {
 
 void delete_line(editorState *State, int line_no){
   for(int i = 0 ; i < State->no_of_rows ; i++){
-    if(State->index_table[i] >= line_no){
-      // if(State->index_table[i] < State->no_of_lines-1)
+    if(i >= line_no){
       State->index_table[i] = State->index_table[i+1];
     }   
   }
-  // State->no_of_lines-- ;
   State->no_of_rows--;
 }
 
 void backSpace(editorState *State , row_state *r_state){
 
+  printf("\e[2J") ;
   row_state *curr = get_row_at(State, r_state, State->fileposition_y);
   if(State->fileposition_x<=0)
   {
@@ -264,7 +256,6 @@ void nprintf(row_state *r_state, editorState State,int line_no){
 
 bool refresh_screen(editorState State, row_state *r_state, int bound ){
 
-  printf("\e[2J") ;
   render_headder(State);
   render_footer(State);
   move_cursor_to_home() ;
@@ -305,10 +296,16 @@ void initEditor(editorState* State){
   get_window (&State->screen_rows, &State->screen_cols) ;
   clear_display();
   fflush(stdout);
-  //load the file
+  // TODO: load the file
 }
 
-int main(int argc,char *argv[]){
+int main(int argc, char *argv[]){
+  // Parse arguments
+  // if(argc > 1) {
+  //   FILE *f;
+  //   f = freopen(argv[1]);
+    
+  // }
   editorState State ;
   row_state *r_state = malloc(sizeof(row_state) * 10);
   State.index_table  = malloc(sizeof(int) * 10);
