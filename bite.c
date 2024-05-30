@@ -31,7 +31,8 @@ typedef struct editorState {
   int offset_x, offset_y ;
   int screen_rows ;
   int screen_cols ;
-  int no_of_lines ;
+  int no_of_lines  ; 
+  int no_of_rows  ;
   int *index_table ;
   FILE *fp ; 
 } editorState ;
@@ -61,7 +62,7 @@ row_state* get_row_at(editorState *State, row_state *r_state, int position) {
 bool save_to_file(editorState *State, row_state *r_state){
    FILE *fp = fopen("untitled.txt","w+") ;
    
-   for(int i = 0 ; i < State->no_of_lines ; i++){
+   for(int i = 0 ; i < State->no_of_rows ; i++){
 
      char *line = get_row_at(State, r_state, i)->line;
      for(int j = 0 ; j < get_row_at(State, r_state, i)->no_of_char ; j++){
@@ -99,18 +100,19 @@ void newline(editorState* State, row_state** r_state){
 
   // update the index table
   pos_y++;
-  for(int i=State->no_of_lines; i> pos_y ; i--)
+  for(int i=State->no_of_rows; i> pos_y ; i--)
      State->index_table[i] = State->index_table[i-1];
   State->index_table[pos_y] = State->no_of_lines;
 
   // Update the state
   State->no_of_lines++;
+  State->no_of_rows++ ;
   State->fileposition_x= 0;
-  for(int i=0; i<State->no_of_lines-1; i++) {
-    if((*r_state+i)->line_no >= new_row->line_no) {
-      (*r_state+i)->line_no++;
-    }
-  }
+  // for(int i=0; i<State->no_of_lines-1; i++) {
+  //   if((*r_state+i)->line_no >= new_row->line_no) {
+  //     (*r_state+i)->line_no++;
+  //   }
+  // }
   State->fileposition_y++;
 }
 
@@ -178,13 +180,14 @@ void handle_CSI(editorState* State, escseq key, row_state * r_state) {
 }
 
 void delete_line(editorState *State, int line_no){
-  for(int i = 0 ; i < State->no_of_lines ; i++){
-    if(State->index_table[i]>line_no){
-      if(State->index_table[i] < State->no_of_lines-1)
+  for(int i = 0 ; i < State->no_of_rows ; i++){
+    if(State->index_table[i] >= line_no){
+      // if(State->index_table[i] < State->no_of_lines-1)
       State->index_table[i] = State->index_table[i+1];
     }   
   }
-  State->no_of_lines-- ;
+  // State->no_of_lines-- ;
+  State->no_of_rows--;
 }
 
 void backSpace(editorState *State , row_state *r_state){
@@ -202,7 +205,7 @@ void backSpace(editorState *State , row_state *r_state){
      int posx = last->no_of_char - curr->no_of_char ;
      State->fileposition_y--;
      State->fileposition_x = posx;
-     delete_line(State, State->fileposition_y) ;
+     delete_line(State, State->fileposition_y+1) ;
   }
   else{
     for( int i = State->fileposition_x -1; i < curr->no_of_char ; i++)
@@ -297,6 +300,8 @@ void initEditor(editorState* State){
   State->offset_x = 0 ; 
   State->offset_y = 0 ;
   State->no_of_lines = 1 ;
+  State->no_of_rows = 1;
+  // State->no_of_rows  =1;
   get_window (&State->screen_rows, &State->screen_cols) ;
   clear_display();
   fflush(stdout);
@@ -307,7 +312,7 @@ int main(int argc,char *argv[]){
   editorState State ;
   row_state *r_state = malloc(sizeof(row_state) * 10);
   State.index_table  = malloc(sizeof(int) * 10);
-  for(int i=0; i < 10; i++) State.index_table[i] = i;
+  for(int i=0; i < 10; i++) State.index_table[i] = 0;
   r_state->line = malloc(sizeof(char)*1000);
   r_state->line_no = 1;
   bool changeflag = 1 ;
@@ -315,7 +320,7 @@ int main(int argc,char *argv[]){
   initEditor(&State) ;
   while(1){
     if(changeflag)
-      changeflag = refresh_screen(State ,r_state, State.no_of_lines) ;
+      changeflag = refresh_screen(State ,r_state, State.no_of_rows) ;
     changeflag = save_buffer(&State, &r_state) ;
   }
   return 0 ;
