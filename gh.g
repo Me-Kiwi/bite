@@ -1,3 +1,0 @@
-duck
-suck
-luck
