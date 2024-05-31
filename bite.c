@@ -211,6 +211,7 @@ bool save_buffer(editorState *State, row_state **r_state){
   
     char input;
     read(STDIN_FILENO, &input, 1);
+    printf("read %c", (int)input);
     switch(input) {
       case '\e':
         escseq key = CSI_code(State, *r_state);
@@ -292,20 +293,49 @@ void initEditor(editorState* State){
   State->offset_y = 0 ;
   State->no_of_lines = 1 ;
   State->no_of_rows = 1;
-  // State->no_of_rows  =1;
   get_window (&State->screen_rows, &State->screen_cols) ;
   clear_display();
   fflush(stdout);
   // TODO: load the file
 }
 
+void load_file(editorState *State, row_state **r_state, const char *filename) {
+    FILE *file = fopen(filename, "r");
+    if (!file) {
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    int row_count = 0;
+
+    while ((read = getline(&line, &len, file)) != -1) {
+        if (row_count >= State->no_of_lines) {
+            *r_state = realloc(*r_state, sizeof(row_state) * (State->no_of_lines + 10));
+            State->index_table = realloc(State->index_table, sizeof(int) * (State->no_of_lines + 10));
+            State->no_of_lines += 10;
+        }
+
+        row_state *new_row = *r_state + row_count;
+        new_row->line = malloc(read + 1);
+        memcpy(new_row->line, line, read);
+        new_row->no_of_char = read;
+        new_row->line_no = row_count + 1;
+
+        State->index_table[row_count] = row_count;
+        row_count++;
+    }
+
+    State->no_of_rows = row_count;
+    State->no_of_lines = row_count;
+
+    free(line);
+    fclose(file);
+}
+
 int main(int argc, char *argv[]){
-  // Parse arguments
-  // if(argc > 1) {
-  //   FILE *f;
-  //   f = freopen(argv[1]);
-    
-  // }
   editorState State ;
   row_state *r_state = malloc(sizeof(row_state) * 10);
   State.index_table  = malloc(sizeof(int) * 10);
@@ -313,8 +343,14 @@ int main(int argc, char *argv[]){
   r_state->line = malloc(sizeof(char)*1000);
   r_state->line_no = 1;
   bool changeflag = 1 ;
-  enable_raw_mode() ;
   initEditor(&State) ;
+  // Parse arguments
+      printf("argc is %d/n", argc);
+      if (argc > 1) {
+            printf("loading %s\n", argv[1]);
+            load_file(&State, &r_state, argv[1]);
+        }
+  enable_raw_mode() ;
   while(1){
     if(changeflag)
       changeflag = refresh_screen(State ,r_state, State.no_of_rows) ;
