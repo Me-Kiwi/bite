@@ -55,6 +55,10 @@ void render_footer(editorState State) {
     fflush(stdout);
 }
 
+void line_alloc(row_state *r_state, int no_char){
+  r_state->line = realloc(r_state->line,no_char) ;
+}
+
 row_state* get_row_at(editorState *State, row_state *r_state, int position) {
   return r_state+ State->index_table[position];
 } 
@@ -88,8 +92,9 @@ void newline(editorState* State, row_state** r_state){
   row_state *curr_row = get_row_at(State, *r_state, pos_y);
   
   // Allocate space for next line
-  new_row->line = malloc(sizeof(char) * 100);
+
   new_row->no_of_char = curr_row->no_of_char - pos_x;
+  new_row->line = malloc(sizeof(char) * ((new_row->no_of_char/50)+1)*50);
   new_row->line_no = pos_y + 1 + 1;
 
   // Copy the text after the cursor to new line
@@ -223,12 +228,15 @@ bool save_buffer(editorState *State, row_state **r_state){
         newline(State, r_state);
         break;
       default: 
-       for(int i = 90 ; i >= State->fileposition_x + 1 ; i--){
+       for(int i = get_row_at(State, *r_state, State->fileposition_y)->no_of_char ; i >= State->fileposition_x + 1; i--){
          (*r_state)[State->index_table[State->fileposition_y]].line[i] = (*r_state)[State->index_table[State->fileposition_y]].line[i-1] ;
        }
+       // (*r_state)->line = realloc((*r_state)->line, 10000*sizeof(char)) ;
+       if( (get_row_at(State, *r_state, State->fileposition_y)->no_of_char + 1)%50 == 0)
+         line_alloc(get_row_at(State, *r_state, State->fileposition_y), get_row_at(State, *r_state, State->fileposition_y)->no_of_char+50) ; 
        get_row_at(State, *r_state, State->fileposition_y)->line[State->fileposition_x] = input;
-        State->fileposition_x++;
-        get_row_at(State, *r_state, State->fileposition_y)->no_of_char++;
+       State->fileposition_x++;
+       get_row_at(State, *r_state, State->fileposition_y)->no_of_char++;
     }
     return 1 ;
 }
@@ -310,7 +318,9 @@ int main(int argc, char *argv[]){
   row_state *r_state = malloc(sizeof(row_state) * 10);
   State.index_table  = malloc(sizeof(int) * 10);
   for(int i=0; i < 10; i++) State.index_table[i] = 0;
-  r_state->line = malloc(sizeof(char)*1000);
+  r_state->line = malloc(sizeof(char)*51);
+  // r_state->line = realloc(r_state->line, sizeof(char)*10) ;
+  // r_state->line = realloc(r_state->line, sizeof(char)*100) ;
   r_state->line_no = 1;
   bool changeflag = 1 ;
   enable_raw_mode() ;
@@ -319,6 +329,7 @@ int main(int argc, char *argv[]){
     if(changeflag)
       changeflag = refresh_screen(State ,r_state, State.no_of_rows) ;
     changeflag = save_buffer(&State, &r_state) ;
+    
   }
   return 0 ;
 }
