@@ -12,6 +12,15 @@
 #define max(x, y) ((x) > (y) ? (x) : (y))
 #define min(x, y) ((x) < (y) ? (x) : (y))
 
+// ANSI color codes
+#define RESET   "\033[0m"
+#define MAGENTA "\033[95m"  // Keywords
+#define BLUE    "\033[94m"  // Types
+#define GREEN   "\033[92m"  // Strings
+#define RED     "\033[91m"  // Numbers
+#define GRAY    "\033[90m"  // Comments
+#define CYAN    "\033[96m"  // Functions
+
 typedef enum escseq{
   OTHER ,
   UP ,
@@ -34,8 +43,113 @@ typedef struct editorState {
   int no_of_lines  ; 
   int no_of_rows  ;
   int *index_table ;
+  char* filename ;
   FILE *fp ; 
 } editorState ;
+
+
+const char *keywords[] = {
+    "auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", 
+    "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", 
+    "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", 
+    "volatile", "while", "_Alignas", "_Alignof", "_Atomic", "_Bool", "_Complex", "_Generic", "_Imaginary", 
+    "_Noreturn", "_Static_assert", "_Thread_local"
+};
+
+const char *types[] = {
+    "int", "char", "float", "double", "short", "long", "signed", "unsigned", "void", "bool", "_Bool", 
+    "_Complex", "_Imaginary", "size_t", "ptrdiff_t", "intptr_t", "uintptr_t"
+};
+const char *functions[] = {
+    "printf", "scanf", "malloc", "free", "strcpy", "strcat", "strcmp", "strlen", "memcpy", "memset",
+    "fopen", "fclose", "fread", "fwrite", "fgets", "fputs", "fprintf", "fscanf", "sprintf", "sscanf",
+    "atoi", "atol", "atof", "abs", "exit", "qsort", "bsearch", "rand", "srand", "time", "clock", "difftime",
+    "mktime", "asctime", "ctime", "strftime", "localtime", "gmtime"
+};
+
+int is_in_list(const char *word, const char *list[], int list_size) {
+    for (int i = 0; i < list_size; ++i) {
+        if (strcmp(word, list[i]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void print_highlighted_word(const char *word, const char *color) {
+    printf("%s%s%s", color, word, RESET);
+}
+
+void highlight_printf(const char *code, int n) {
+    char buffer[256];
+    int i = 0, j = 0;
+    int length = n; 
+    int in_preprocessor_directive = 0;
+
+    while (i < length) {
+        if (isspace(code[i]) || ispunct(code[i]) || i == length-1) {
+            if (j > 0) {
+                buffer[j] = '\0';
+                if (is_in_list(buffer, keywords, sizeof(keywords) / sizeof(char *))) {
+                    print_highlighted_word(buffer, MAGENTA);
+                } else if (is_in_list(buffer, types, sizeof(types) / sizeof(char *))) {
+                    print_highlighted_word(buffer, BLUE);
+                } else if (isdigit(buffer[0])) {
+                    print_highlighted_word(buffer, RED);
+                } else if (is_in_list(buffer, functions, sizeof(functions) / sizeof(char *))) {
+                    print_highlighted_word(buffer, CYAN); 
+                } else {
+                    printf("%s", buffer);
+                }
+                j = 0;
+            }
+
+            if (code[i] == '/' && code[i + 1] == '/') {
+                printf(GRAY);
+                while (i < length && code[i] != '\n') {
+                    putchar(code[i++]);
+                }
+                printf(RESET);
+            } else if (code[i] == '/' && code[i + 1] == '*') {
+                printf(GRAY);
+                while (i < length && !(code[i] == '*' && code[i + 1] == '/')) {
+                    putchar(code[i++]);
+                }
+                if (i < length) {
+                    putchar(code[i++]);
+                    putchar(code[i++]);
+                }
+                printf(RESET);
+            } else if (code[i] == '"') {
+                printf(GREEN);
+                putchar(code[i++]);
+                while (i < length && code[i] != '"') {
+                    if (code[i] == '\\' && code[i + 1] == '"') {
+                        putchar(code[i++]);
+                    }
+                    putchar(code[i++]);
+                }
+                if (i < length) {
+                    putchar(code[i++]);
+                }
+                printf(RESET);
+            }  else if (code[i] == '#') {
+                    in_preprocessor_directive = 1;
+                    printf(GREEN);
+                    putchar(code[i++]);
+                    while (i < length && code[i] != ' ') {
+                          putchar(code[i++]);
+                      }
+                    printf(RESET);
+                    in_preprocessor_directive = 0;
+                } else {
+                putchar(code[i++]);
+            }
+        } else {
+            buffer[j++] = code[i++];
+        }
+    }
+}
 
 void render_headder(editorState State) {
     printf("\033[1;1H"); 
@@ -73,7 +187,7 @@ bool save_to_file(editorState *State, row_state *r_state){
      for(int j = 0 ; j < get_row_at(State, r_state, i)->no_of_char ; j++){
        fputc(line[j], fp);
      }
-     fputc('\n', fp) ;
+     // fputc('\n', fp) ;
    }
    fclose(fp) ;
    exit(0) ;
@@ -101,8 +215,9 @@ void newline(editorState* State, row_state** r_state){
   // Copy the text after the cursor to new line
   memcpy(new_row->line, curr_row->line+pos_x, new_row->no_of_char+1);
 
-  curr_row->no_of_char = pos_x;
-  curr_row->line[pos_x] = 0;
+  curr_row->no_of_char = pos_x+1;
+  curr_row->line[pos_x] = '\n';
+  // curr_row->line[pos_x] = 0;
 
   // update the index table
   pos_y++;
@@ -256,9 +371,12 @@ void nprintf(row_state *r_state, editorState State,int line_no, int b){
   if(State.fileposition_y == line_no) printf("|");
   else printf(" ");
   printf(" \e[1;0m");
-  for(int i = 0 ; i < line->no_of_char ; i++){
-    printf("%c", line->line[i]) ;
-    fflush(stdout) ;
+  int len = strlen(State.filename);
+  if(State.filename[len-1] == 'c' && State.filename[len-2] == '.') {
+    highlight_printf(line->line, line->no_of_char);
+  } else {
+    for(int i = 0 ; i < line->no_of_char ; i++)
+      printf("%c", line->line[i]) ;
   }
   printf("\e[0K") ;
   printf(" \e[0m");
@@ -268,12 +386,11 @@ void nprintf(row_state *r_state, editorState State,int line_no, int b){
 bool refresh_screen(editorState State, row_state *r_state, int bound ){
 
  render_footer(State);
-  // move_cursor_to_home() ;
-   printf("\e[?25l");
+  printf("\033[2J\033[H");
+  printf("\e[?25l");
   int start = ((State.fileposition_y)/(State.screen_rows-8))*(State.screen_rows-8);
-  int end   = min(((State.fileposition_y)/(State.screen_rows-8)+1)*((State.screen_rows-8)), State.no_of_lines);
+  int end   = min(((State.fileposition_y)/(State.screen_rows-8)+1)*((State.screen_rows-8)), bound);
   for(int i = start; i < end ; i++){
-  // for(int i =0; i < (State.fileposition_y/(State.screen_rows-2) + 1)*(State.screen_rows-2); i++){
     nprintf(r_state, State, i, start) ;
   }
   cursor_to(State.fileposition_y+3 - start, State.fileposition_x+11) ;
@@ -332,10 +449,17 @@ void load_file(editorState *State, row_state **r_state, const char *filename) {
             State->index_table = realloc(State->index_table, sizeof(int) * (State->no_of_lines + 10));
             State->no_of_lines += 10;
         }
-
+        int p=1;
+        // len-=p;
+        // read-=p;
         row_state *new_row = *r_state + row_count;
-        new_row->line = malloc(((len/50)+1)*50);
-        memcpy(new_row->line, line, read);
+        new_row->line = malloc((((len)/50)+1)*50);
+        // memcpy(new_row->line, line, read);
+        int j=0;
+        for(int i=0; i<len-2; i++) {
+          // if(line[i] == '\n'){j++; continue; }
+          new_row->line[i-j] = line[i];
+        }
         new_row->no_of_char = read;
         new_row->line_no = row_count + 1;
 
@@ -363,7 +487,10 @@ int main(int argc, char *argv[]){
   initEditor(&State) ;
       if (argc > 1) {
             load_file(&State, &r_state, argv[1]);
-        }
+            State.filename = argv[1];
+      } else {
+            State.filename = "untitled";  
+      }
   enable_raw_mode() ;
   while(1){
     if(changeflag)
