@@ -42,7 +42,8 @@ void render_headder(editorState State) {
     printf("\033[47m \033[30;47m");
     printf("  BITE");
     for(int j=0; j<State.screen_cols-16; j++) printf(" ");
-    printf("\033[1;1H\033[1B\033[1B\033[0m");
+    // printf("\033[1;1H\033[1B\033[1B\033[0m");
+    printf("\033[0m");
     fflush(stdout);
 }
 
@@ -216,6 +217,7 @@ bool save_buffer(editorState *State, row_state **r_state){
   
     char input;
     read(STDIN_FILENO, &input, 1);
+    // printf("read %c", (int)input);
     switch(input) {
       case '\e':
         escseq key = CSI_code(State, *r_state);
@@ -245,10 +247,10 @@ void move_cursor_to_home() {
   printf("\e[2;1H") ;
 }
 
-void nprintf(row_state *r_state, editorState State,int line_no){
+void nprintf(row_state *r_state, editorState State,int line_no, int b){
   row_state *line = get_row_at(&State, r_state, line_no) ;
   move_cursor_to_home() ;
-  cursor_to(line_no + 3, 4);
+  cursor_to(line_no + 3 - b , 4);
   printf("\e[0K") ;
   printf("\e[1;0m%d\t", line_no+1);
   if(State.fileposition_y == line_no) printf("|");
@@ -259,20 +261,24 @@ void nprintf(row_state *r_state, editorState State,int line_no){
     fflush(stdout) ;
   }
   printf("\e[0K") ;
+  printf(" \e[0m");
   fflush(stdout) ;
 }
 
 bool refresh_screen(editorState State, row_state *r_state, int bound ){
 
-  render_headder(State);
-  render_footer(State);
-  move_cursor_to_home() ;
-  printf("\e[?25l");
-  for(int i = 0 ; i < bound ; i++){
-    nprintf(r_state, State, i ) ;
+ render_footer(State);
+  // move_cursor_to_home() ;
+   printf("\e[?25l");
+  int start = ((State.fileposition_y)/(State.screen_rows-8))*(State.screen_rows-8);
+  int end   = min(((State.fileposition_y)/(State.screen_rows-8)+1)*((State.screen_rows-8)), State.no_of_lines);
+  for(int i = start; i < end ; i++){
+  // for(int i =0; i < (State.fileposition_y/(State.screen_rows-2) + 1)*(State.screen_rows-2); i++){
+    nprintf(r_state, State, i, start) ;
   }
-  cursor_to(State.fileposition_y+3, State.fileposition_x+11) ;
+  cursor_to(State.fileposition_y+3 - start, State.fileposition_x+11) ;
   printf("\e[?25h");
+
   fflush(stdout);
   return 0 ;
 }
@@ -300,20 +306,51 @@ void initEditor(editorState* State){
   State->offset_y = 0 ;
   State->no_of_lines = 1 ;
   State->no_of_rows = 1;
-  // State->no_of_rows  =1;
   get_window (&State->screen_rows, &State->screen_cols) ;
   clear_display();
   fflush(stdout);
+  render_headder(*State);
   // TODO: load the file
 }
 
+void load_file(editorState *State, row_state **r_state, const char *filename) {
+   // TODO : remove newlines from buffer 
+    FILE *file = fopen(filename, "r");
+    if (!file) {
+        perror("fopen");
+        exit(EXIT_FAILURE);
+    }
+
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    int row_count = 0;
+
+    while ((read = getline(&line, &len, file)) != -1) {
+        if (row_count >= State->no_of_lines) {
+            *r_state = realloc(*r_state, sizeof(row_state) * (State->no_of_lines + 10));
+            State->index_table = realloc(State->index_table, sizeof(int) * (State->no_of_lines + 10));
+            State->no_of_lines += 10;
+        }
+
+        row_state *new_row = *r_state + row_count;
+        new_row->line = malloc(((len/50)+1)*50);
+        memcpy(new_row->line, line, read);
+        new_row->no_of_char = read;
+        new_row->line_no = row_count + 1;
+
+        State->index_table[row_count] = row_count;
+        row_count++;
+    }
+
+    State->no_of_rows = row_count;
+    State->no_of_lines = row_count;
+
+    free(line);
+    fclose(file);
+}
+
 int main(int argc, char *argv[]){
-  // Parse arguments
-  // if(argc > 1) {
-  //   FILE *f;
-  //   f = freopen(argv[1]);
-    
-  // }
   editorState State ;
   row_state *r_state = malloc(sizeof(row_state) * 10);
   State.index_table  = malloc(sizeof(int) * 10);
@@ -323,13 +360,15 @@ int main(int argc, char *argv[]){
   // r_state->line = realloc(r_state->line, sizeof(char)*100) ;
   r_state->line_no = 1;
   bool changeflag = 1 ;
-  enable_raw_mode() ;
   initEditor(&State) ;
+      if (argc > 1) {
+            load_file(&State, &r_state, argv[1]);
+        }
+  enable_raw_mode() ;
   while(1){
     if(changeflag)
       changeflag = refresh_screen(State ,r_state, State.no_of_rows) ;
     changeflag = save_buffer(&State, &r_state) ;
-    
   }
   return 0 ;
 }
