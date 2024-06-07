@@ -34,6 +34,7 @@ typedef struct editorState {
   int no_of_lines  ; 
   int no_of_rows  ;
   int *index_table ;
+  char mode ;
   FILE *fp ; 
 } editorState ;
 
@@ -50,7 +51,9 @@ void render_headder(editorState State) {
 void render_footer(editorState State) {
     printf("\033[%d;%dH", State.screen_rows-1, 1); 
     printf("\033[47m \033[30;47m");
-    printf(" Ins | line %d col %d", State.fileposition_y, State.fileposition_x);
+    if(State.mode == 'i') printf(" INS ") ;
+    else if(State.mode == '\e') printf(" NOR ") ;
+    printf("| line %d col %d", State.fileposition_y, State.fileposition_x);
     for(int j=0; j<State.screen_cols-25; j++) printf(" ");
     printf("\033[1;1H\033[0m");
     fflush(stdout);
@@ -129,10 +132,6 @@ void cursor_to(int y,int x){
 escseq CSI_code(editorState *State, row_state *r_state){
   char ch ; 
   escseq escseq ;
-  read(STDIN_FILENO, &ch, 1) ;//ignore
-  if(ch == 'w'){
-     save_to_file(State, r_state) ;
-  }
   read(STDIN_FILENO, &ch, 1) ;
   switch(ch){
     case 'A' : return UP ;
@@ -144,7 +143,7 @@ escseq CSI_code(editorState *State, row_state *r_state){
 }
 
 
-void handle_CSI(editorState* State, escseq key, row_state * r_state) {
+void hande_CSI(editorState* State, escseq key, row_state * r_state) {
   switch(key) {
     case UP:
         State->fileposition_y = max(State->fileposition_y - 1, 0);
@@ -213,15 +212,12 @@ void backSpace(editorState *State , row_state *r_state){
   }
 }
 
-bool save_buffer(editorState *State, row_state **r_state){
-  
-    char input;
-    read(STDIN_FILENO, &input, 1);
+
+bool save_buffer(editorState *State, row_state **r_state, char input){  
     // printf("read %c", (int)input);
     switch(input) {
-      case '\e':
-        escseq key = CSI_code(State, *r_state);
-        handle_CSI(State, key, *r_state);
+      case '\e':       
+        State->mode = input ;
         break;
       case 127:
         backSpace(State ,*r_state);
@@ -242,6 +238,18 @@ bool save_buffer(editorState *State, row_state **r_state){
     }
     return 1 ;
 }
+
+
+void normal_mode(editorState *State, row_state *r_state, char input){
+  switch(input){
+    case 'i' :
+        State->mode = input ;
+        break ;
+    }
+}
+
+
+
 
 void move_cursor_to_home() {
   printf("\e[2;1H") ;
@@ -271,7 +279,7 @@ bool refresh_screen(editorState State, row_state *r_state, int bound ){
   // move_cursor_to_home() ;
    printf("\e[?25l");
   int start = ((State.fileposition_y)/(State.screen_rows-8))*(State.screen_rows-8);
-  int end   = min(((State.fileposition_y)/(State.screen_rows-8)+1)*((State.screen_rows-8)), State.no_of_lines);
+  int end   = min(((State.fileposition_y)/(State.screen_rows-8)+1)*((State.screen_rows-8)), bound);
   for(int i = start; i < end ; i++){
   // for(int i =0; i < (State.fileposition_y/(State.screen_rows-2) + 1)*(State.screen_rows-2); i++){
     nprintf(r_state, State, i, start) ;
@@ -306,6 +314,7 @@ void initEditor(editorState* State){
   State->offset_y = 0 ;
   State->no_of_lines = 1 ;
   State->no_of_rows = 1;
+  State->mode = '\e' ;
   get_window (&State->screen_rows, &State->screen_cols) ;
   clear_display();
   fflush(stdout);
@@ -350,6 +359,33 @@ void load_file(editorState *State, row_state **r_state, const char *filename) {
     fclose(file);
 }
 
+void handle_input(editorState *State, row_state **r_state){
+  char input;
+  read(STDIN_FILENO, &input, 1);
+  if(input == '\e'){
+    char curr_mode = State->mode;
+    State->mode = '\e';
+    refresh_screen(*State, *r_state, State->no_of_rows);
+    read(STDIN_FILENO, &input, 1);
+    if(input == '['){
+          State->mode=curr_mode;
+          escseq key = CSI_code(State, *r_state);
+          hande_CSI(State, key, *r_state);
+          return;     
+     }
+  }
+   switch(State->mode){
+    case 'i' :{  
+        save_buffer(State, r_state, input) ;//TODO : change save buffer to insertion mode
+              break ;
+     } 
+    case '\e' :{
+        normal_mode(State, *r_state, input) ;
+        break ;
+     }
+  }
+}
+
 int main(int argc, char *argv[]){
   editorState State ;
   row_state *r_state = malloc(sizeof(row_state) * 10);
@@ -366,9 +402,10 @@ int main(int argc, char *argv[]){
         }
   enable_raw_mode() ;
   while(1){
-    if(changeflag)
+    if(1)
       changeflag = refresh_screen(State ,r_state, State.no_of_rows) ;
-    changeflag = save_buffer(&State, &r_state) ;
+      handle_input(&State, &r_state) ;
+      // changeflag = save_buffer(&State, &r_state) ;
   }
   return 0 ;
 }
