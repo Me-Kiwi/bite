@@ -2,14 +2,15 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <termios.h>
-#include <sys/ioctl.h>
+// #include <termios.h>
+// #include <sys/ioctl.h>
 #include <stdbool.h>
 #include <math.h>
 #include <string.h>
 #include <ctype.h>
-#include <sys/wait.h>
+// #include <sys/wait.h>
 
+ #include<conio.h>
 #define max(x, y) ((x) > (y) ? (x) : (y))
 #define min(x, y) ((x) < (y) ? (x) : (y))
 
@@ -243,7 +244,8 @@ void cursor_to(int y,int x){
 escseq CSI_code(editorState *State, row_state *r_state){
   char ch ; 
   escseq escseq ;
-  read(STDIN_FILENO, &ch, 1) ;
+  //read(STDIN_FILENO, &ch, 1) ;
+  ch =_getch();
   switch(ch){
     case 'A' : return UP ;
     case 'B' : return DOWN ;
@@ -307,8 +309,6 @@ void backSpace(editorState *State , row_state *r_state){
      if(State->fileposition_y == 0) return ;
      if(State->fileposition_x < curr->no_of_char)
      {
-       printf("hello");
-       fflush(stdout) ;
        memcpy(last->line+last->no_of_char-1, curr->line, curr->no_of_char);
        last->no_of_char+= curr->no_of_char;
      }
@@ -330,9 +330,11 @@ bool save_buffer(editorState *State, row_state **r_state, char input){
       case '\e':       
         State->mode = input ;
         break;
+      case 8:
       case 127:
         backSpace(State ,*r_state);
         break;
+      case 13:
       case '\n':
         newline(State, r_state);
         break;
@@ -430,7 +432,7 @@ void nprintf(row_state *r_state, editorState State,int line_no, int b){
 
 bool refresh_screen(editorState *State, row_state *r_state, int bound ){
 
-  printf("\033[2J\033[H");
+  // printf("\033[2J\033[H");
   render_footer(*State);
   render_headder(*State);
   printf("\e[?25l");
@@ -451,21 +453,23 @@ bool refresh_screen(editorState *State, row_state *r_state, int bound ){
   return 0 ;
 }
 
-void enable_raw_mode() {
-    struct termios raw;
-    tcgetattr(STDIN_FILENO, &raw);
-    raw.c_lflag &= ~(ECHO | ICANON);
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
-}
+// void enable_raw_mode() {
+//     struct termios raw;
+//     tcgetattr(STDIN_FILENO, &raw);
+//     raw.c_lflag &= ~(ECHO | ICANON);
+//     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+// }
 
 void get_window(int *rows, int *cols){
-    struct winsize ws;
+    // struct winsize ws;
 
-    if(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1){
-      perror("ioctl") ;
-    }
-    *rows = ws.ws_row ;
-    *cols = ws.ws_col ;
+    // if(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1){
+    //   perror("ioctl") ;
+    // }
+    // *rows = ws.ws_row ;
+    // *cols = ws.ws_col ;
+    *rows = 40;
+  *cols = 80;
 }
 
 void initEditor(editorState* State){
@@ -522,21 +526,58 @@ void load_file(editorState *State, row_state **r_state, const char *filename) {
     fclose(file);
 }
 
+// void handle_input(editorState *State, row_state **r_state){
+//   char input;
+//   //read(STDIN_FILENO, &input, 1);
+//   input = _getch();
+//   if(input == 3) exit(0);
+//   if(input == '\e'){
+//     char curr_mode = State->mode;
+//     State->mode = '\e';
+//     refresh_screen(State, *r_state, State->no_of_rows);
+//     //read(STDIN_FILENO, &input, 1);
+//     input  = _getch();
+//     if(input == '['){
+//           State->mode=curr_mode;
+//           escseq key = CSI_code(State, *r_state);
+//           hande_CSI(State, key, *r_state);
+//           return;     
+//      }
+//   }
+//    switch(State->mode){
+//     case 'i' :{  
+//         save_buffer(State, r_state, input) ;//TODO : change save buffer to insertion mode
+//               break ;
+//      } 
+//     case '\e' :{
+//         normal_mode(State, *r_state, input) ;
+//         break ;
+//      }
+//   }
+// }
 void handle_input(editorState *State, row_state **r_state){
   char input;
-  read(STDIN_FILENO, &input, 1);
-  if(input == '\e'){
-    char curr_mode = State->mode;
-    State->mode = '\e';
+  //read(STDIN_FILENO, &input, 1);
+  input = _getch();
+  // printf("DA %c %d \n", input, input);
+  // fflush(stdout);
+  // exit(0);
+  if(input == 3) exit(0);
+  if(input == 27) State->mode = '\e';
+  if(input == -32){
+    // exit(0);
     refresh_screen(State, *r_state, State->no_of_rows);
-    read(STDIN_FILENO, &input, 1);
-    if(input == '['){
-          State->mode=curr_mode;
-          escseq key = CSI_code(State, *r_state);
-          hande_CSI(State, key, *r_state);
-          return;     
-     }
-  }
+    input  = _getch();
+    escseq key;
+    switch(input) {
+      case 72:{ key = UP; break; }
+      case 77:{ key = RIGHT; break; }
+      case 75:{ key = LEFT; break; }
+      case 80:{ key = DOWN; break; }
+    }
+    hande_CSI(State, key, *r_state);
+    return;     
+   }
    switch(State->mode){
     case 'i' :{  
         save_buffer(State, r_state, input) ;//TODO : change save buffer to insertion mode
@@ -564,7 +605,7 @@ int main(int argc, char *argv[]){
       } else {
             State.filename = "untitled";  
       }
-  enable_raw_mode() ;
+  // enable_raw_mode() ;
   while(1){
     if(1)
       changeflag = refresh_screen(&State ,r_state, State.no_of_rows) ;
